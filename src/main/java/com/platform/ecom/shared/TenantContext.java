@@ -27,6 +27,16 @@ public final class TenantContext {
     }
 
     /**
+     * For call sites that only make sense inside an authenticated request
+     * (most controllers) — fails loudly instead of silently proceeding
+     * unscoped if it's ever called somewhere TenantContext was never set.
+     */
+    public static TenantId currentOrThrow() {
+        return current().orElseThrow(() ->
+                new IllegalStateException("No tenant context set — this code path requires an authenticated request"));
+    }
+
+    /**
      * MUST be called at the end of every request (see JwtAuthenticationFilter's
      * finally block). Threads are reused from a pool — without this, the
      * next unrelated request handled by the same thread would silently

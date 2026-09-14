@@ -54,4 +54,8 @@ public class JwtService {
                 .parseSignedClaims(token)
                 .getPayload();
     }
+
+    public long expirationSeconds() {
+        return expirationSeconds;
+    }
 }

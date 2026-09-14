@@ -141,6 +141,13 @@
             <version>${archunit.version}</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- Correct CSV parsing (quoted fields, embedded newlines) — Phase 5 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+            <version>1.11.0</version>
+        </dependency>
     </dependencies>
 
     <build>
