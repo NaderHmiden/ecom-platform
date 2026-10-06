@@ -5,6 +5,7 @@ import com.platform.ecom.shared.TenantId;
 import com.platform.ecom.supplier.domain.RawSupplierRow;
 import com.platform.ecom.supplier.domain.RowStatus;
 import com.platform.ecom.supplier.infrastructure.RawSupplierRowRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -25,11 +26,14 @@ public class SupplierRowProcessor {
 
     private final RawSupplierRowRepository rowRepository;
     private final SupplierRowTransactionOps transactionOps;
+    private final ApplicationEventPublisher eventPublisher;
 
     public SupplierRowProcessor(RawSupplierRowRepository rowRepository,
-                                SupplierRowTransactionOps transactionOps) {
+                                SupplierRowTransactionOps transactionOps,
+                                ApplicationEventPublisher eventPublisher) {
         this.rowRepository = rowRepository;
         this.transactionOps = transactionOps;
+        this.eventPublisher = eventPublisher;
     }
 
     @Async("supplierImportExecutor")
@@ -45,6 +49,7 @@ public class SupplierRowProcessor {
                 transactionOps.processRow(row);
             }
             transactionOps.finalizeJob(jobId);
+            eventPublisher.publishEvent(new SupplierImportJobCompletedEvent(tenantId, jobId));
         } finally {
             TenantContext.clear();
         }

@@ -48,7 +48,7 @@ public final class SupplierRowValidator {
         return errors.isEmpty() ? ValidationResult.valid() : ValidationResult.invalid(errors);
     }
 
-    public record ValidationResult(boolean valid, List<String> errors) {
+    public record ValidationResult(boolean isValid, List<String> errors) {
         public static ValidationResult valid() {
             return new ValidationResult(true, List.of());
         }

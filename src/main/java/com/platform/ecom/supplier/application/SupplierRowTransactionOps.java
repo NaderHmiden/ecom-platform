@@ -43,7 +43,7 @@ public class SupplierRowTransactionOps {
         Map<String, String> data = parseRawData(row.getRawDataJson());
         SupplierRowValidator.ValidationResult result = SupplierRowValidator.validate(data);
 
-        if (result.valid()) {
+        if (result.isValid()) {
             row.markNormalized();
             jobRepository.incrementSucceeded(row.getImportJobId());
         } else {

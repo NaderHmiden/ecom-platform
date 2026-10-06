@@ -31,7 +31,7 @@ public class TenantFilterAspect {
     public void enableTenantFilter() {
         TenantContext.current().ifPresent(tenantId -> {
             Session session = entityManager.unwrap(Session.class);
-            if (!session.getEnabledFilterNames().contains("tenantFilter")) {
+            if (session.getEnabledFilter("tenantFilter") == null) {
                 session.enableFilter("tenantFilter").setParameter("tenantId", tenantId.value());
             }
         });

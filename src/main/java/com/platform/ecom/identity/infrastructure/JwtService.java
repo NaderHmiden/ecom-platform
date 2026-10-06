@@ -18,7 +18,7 @@ public class JwtService {
     private final SecretKey signingKey;
     private final long expirationSeconds;
 
-    public JwtService(@Value("${app.security.jwt.secret}") String secret,
+    public JwtService(@Value("${app.security.jwt.secret:dev-secret-key-must-be-at-least-32-bytes-long-for-hmac-sha256!}") String secret,
                       @Value("${app.security.jwt.expiration-seconds:3600}") long expirationSeconds) {
         this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expirationSeconds = expirationSeconds;
