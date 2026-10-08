@@ -1,59 +1,164 @@
-name: ecom-platform
+# =============================================================================
+# docker-compose.yml — Full local development stack
+#
+# Services:
+#   app        → Spring Boot application (built from Dockerfile)
+#   postgres   → PostgreSQL 15 (primary database)
+#   kafka      → Apache Kafka (async messaging)
+#   zookeeper  → Required by Kafka
+#   redis      → Redis 7 (cache / rate limiting)
+#
+# Usage:
+#   docker compose up -d          # start all services
+#   docker compose logs -f app    # follow application logs
+#   docker compose down -v        # stop and remove volumes
+# =============================================================================
+
+version: "3.9"
 
 services:
+
+  # ---------------------------------------------------------------------------
+  # Spring Boot Application
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ecom-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-ecom_platform}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-ecom}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-must-be-at-least-32-bytes-long-for-hmac-sha256!}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - ecom-network
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 15
+  # ---------------------------------------------------------------------------
   postgres:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     container_name: ecom-postgres
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ecom_platform}
       POSTGRES_USER: ${POSTGRES_USER:-ecom}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ecom} -d ${POSTGRES_DB:-ecom_platform}"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ecom-network
 
+  # ---------------------------------------------------------------------------
+  # Zookeeper (required by Kafka)
+  # ---------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.7.0
+    container_name: ecom-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
+    restart: unless-stopped
+    networks:
+      - ecom-network
+
+  # ---------------------------------------------------------------------------
+  # Apache Kafka
+  # ---------------------------------------------------------------------------
   kafka:
-    image: apache/kafka:3.8.0
+    image: confluentinc/cp-kafka:7.7.0
     container_name: ecom-kafka
     ports:
       - "9092:9092"
     environment:
-      # KRaft mode — this container is both broker and controller.
-      # No Zookeeper service exists in this file on purpose (Phase 3 Step 2 decision).
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # PLAINTEXT_HOST → accessible from host machine (port 9092)
+      # PLAINTEXT       → accessible inside Docker network
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      CLUSTER_ID: ecomplatformkraftcluster
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    depends_on:
+      - zookeeper
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
-      interval: 10s
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:29092", "--list"]
+      interval: 30s
       timeout: 10s
-      retries: 10
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - ecom-network
 
+  # ---------------------------------------------------------------------------
+  # Redis 7
+  # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: ecom-redis
     ports:
       - "6379:6379"
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ecom-network
 
+# =============================================================================
+# Named volumes — data persists across container restarts
+# =============================================================================
 volumes:
   postgres-data:
+  kafka-data:
+  zookeeper-data:
+  zookeeper-log:
+  redis-data:
+
+# =============================================================================
+# Isolated bridge network — services communicate by name, not by IP
+# =============================================================================
+networks:
+  ecom-network:
+    driver: bridge

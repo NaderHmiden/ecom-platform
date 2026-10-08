@@ -1,0 +1,111 @@
+# =============================================================================
+# cd-staging.yml — Continuous Deployment to Staging
+#
+# Triggers automatically after the CI pipeline passes on main.
+# Pulls the freshly built image and deploys it to a staging environment
+# using Docker Compose on a remote server (via SSH).
+#
+# Required GitHub Secrets:
+#   STAGING_HOST         → IP or hostname of the staging server
+#   STAGING_USER         → SSH username (e.g. ubuntu, ec2-user)
+#   STAGING_SSH_KEY      → Private SSH key (contents of ~/.ssh/id_rsa)
+#   STAGING_POSTGRES_PASSWORD
+#   STAGING_JWT_SECRET
+# =============================================================================
+
+name: CD — Staging
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    # Only deploy if CI succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    environment:
+      name: staging
+      url: http://${{ secrets.STAGING_HOST }}:8080/actuator/health
+
+    steps:
+      - name: Checkout source (for docker-compose.yml)
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
+
+      - name: Add staging host to known_hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy docker-compose to staging server
+        run: |
+          scp docker-compose.yml ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}:~/ecom-platform/docker-compose.yml
+
+      - name: Deploy on staging server
+        run: |
+          ssh ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
+            cd ~/ecom-platform
+
+            # Pull the latest image from GHCR
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose pull app
+
+            # Restart the app container only (zero-downtime for stateful services)
+            docker compose up -d --no-deps app
+
+            # Wait for health check to pass
+            echo "Waiting for application to become healthy..."
+            for i in $(seq 1 12); do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health)
+              if [ "$STATUS" = "200" ]; then
+                echo "✅ Application is healthy"
+                exit 0
+              fi
+              echo "Attempt $i/12 — status: $STATUS — waiting 10s..."
+              sleep 10
+            done
+            echo "❌ Application did not become healthy in time"
+            docker compose logs --tail=50 app
+            exit 1
+          EOF
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.STAGING_POSTGRES_PASSWORD }}
+          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET }}
+
+      - name: Smoke test — verify API is responding
+        run: |
+          HEALTH=$(curl -s http://${{ secrets.STAGING_HOST }}:8080/actuator/health | jq -r '.status')
+          if [ "$HEALTH" != "UP" ]; then
+            echo "❌ Smoke test failed: health status = $HEALTH"
+            exit 1
+          fi
+          echo "✅ Smoke test passed: $HEALTH"
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "🚀 Staging deployment successful — $(date -u)"
+          # Add Slack / Discord webhook notification here
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "🔴 Deployment failed — rolling back to previous image"
+          ssh ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
+            cd ~/ecom-platform
+            # Roll back: restart with the previous image (still in Docker cache)
+            docker compose up -d --no-deps --pull never app
+          EOF

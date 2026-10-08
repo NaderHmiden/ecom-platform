@@ -1,0 +1,50 @@
+# =============================================================================
+# docker-compose.override.yml — Development overrides
+#
+# This file is automatically merged by Docker Compose when present.
+# Contains dev-only settings that should NEVER go to production.
+#
+# Usage: docker compose up -d  (this file is merged automatically)
+# =============================================================================
+
+version: "3.9"
+
+services:
+
+  app:
+    # In development, mount source and use spring-boot:run for hot reload.
+    # Remove the 'build' section below if you prefer to use the Dockerfile.
+    environment:
+      # Enable all Actuator endpoints locally (never do this in production)
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "*"
+      # Verbose SQL logging for debugging
+      SPRING_JPA_SHOW_SQL: "true"
+      SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL: "true"
+      LOGGING_LEVEL_COM_PLATFORM_ECOM: DEBUG
+
+  postgres:
+    # Expose PostgreSQL to a DB client (DBeaver, pgAdmin) on the host
+    ports:
+      - "5432:5432"
+
+  kafka:
+    # Kafka UI for local development (visualize topics and messages)
+    # Access at http://localhost:8090
+    environment:
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  # ---------------------------------------------------------------------------
+  # Kafka UI — local only, helps visualize topics and messages
+  # ---------------------------------------------------------------------------
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: ecom-kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      - kafka
+    networks:
+      - ecom-network

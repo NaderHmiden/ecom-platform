@@ -1,5 +1,12 @@
 # 🛒 AI-Powered Ecommerce Operations & Listing Optimization Platform
 
+[![CI](https://github.com/YOUR_USERNAME/ecom-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/ecom-platform/actions/workflows/ci.yml)
+[![CD Staging](https://github.com/YOUR_USERNAME/ecom-platform/actions/workflows/cd-staging.yml/badge.svg)](https://github.com/YOUR_USERNAME/ecom-platform/actions/workflows/cd-staging.yml)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](./Dockerfile)
+[![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.4-6DB33F?logo=spring&logoColor=white)](https://spring.io/projects/spring-boot)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 > A production-grade, multi-tenant SaaS backend that takes resellers from a messy supplier CSV to a live, high-converting, continuously-improving marketplace listing — with AI doing the heavy lifting on language and a deterministic system guaranteeing correctness, safety, and auditability.
 
 ---
@@ -327,6 +334,40 @@ DRAFT → READY_FOR_REVIEW → APPROVED → PUBLISHED
 ---
 
 ## Getting Started
+
+### 🐳 Option A — Docker (Recommended)
+
+The fastest way to run the full stack locally:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/YOUR_USERNAME/ecom-platform.git
+cd ecom-platform
+
+# 2. Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your values (JWT_SECRET minimum 32 chars)
+
+# 3. Start all services (app + postgres + kafka + redis)
+docker compose up -d
+
+# 4. Follow application logs
+docker compose logs -f app
+
+# 5. Verify the app is running
+curl http://localhost:8080/actuator/health
+```
+
+> Kafka UI is available at **http://localhost:8090** (dev override only)
+
+```bash
+# Stop and clean up
+docker compose down -v
+```
+
+---
+
+### ⚙️ Option B — Run Locally (Manual)
 
 ### Prerequisites
 

@@ -1,0 +1,31 @@
+# Build output — the builder stage re-compiles from source
+target/
+
+# Git metadata — not needed inside the image
+.git/
+.gitignore
+
+# IDE project files
+.idea/
+*.iml
+.vscode/
+
+# Local environment overrides
+.env
+.env.local
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Docker files themselves
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Docs
+README.md
+docs/
+
+# GitHub Actions
+.github/
